@@ -1,7 +1,25 @@
 from cffi import FFI
+import platform
+
+def load_library(ffi):
+  lib = None
+  try:
+    sysstr = platform.system()
+    ext = ""
+    if sysstr == "Windows":
+      ext = ".dll"
+    elif sysstr == "Darwin":
+      ext = ".dylib"
+    else:
+      ext = ".so"
+    lib = ffi.dlopen('target/release/libsvg2polylines' + ext)
+  except:
+    pass
+  return lib
 
 ffi = FFI()
-lib = ffi.dlopen('target/debug/libsvg2polylines.so')
+lib = load_library(ffi)
+
 
 ffi.cdef('''
 typedef struct CoordinatePair {

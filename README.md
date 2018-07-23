@@ -131,6 +131,13 @@ Example output:
 A Python usage example (with [CFFI](https://cffi.readthedocs.io/)) can be found
 at [`svg2polylines-ffi/example.py`][example-python].
 
+Install cffi:
+
+```
+  $ pip install --upgrade pip
+  $ pip install cffi   -i http://mirrors.aliyun.com/pypi/simple/ --trusted-host mirrors.aliyun.com
+```
+
 Simply run the script:
 
     $ python example.py

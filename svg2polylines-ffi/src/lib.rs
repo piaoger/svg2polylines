@@ -33,10 +33,10 @@ pub extern fn svg_str_to_polylines(
     let r_str = c_str.to_str().unwrap();
 
     // Process
-    match parse(r_str) {
-        Ok(vec) => {
-            // Convert `Vec<Vec<CoordinatePair>>` to `Vec<Polyline>`
-            let mut tmp_vec: Vec<Polyline> = vec.into_iter().map(|mut v| {
+    let vec = parse(r_str);
+
+    // Convert `Vec<Vec<CoordinatePair>>` to `Vec<Polyline>`
+    let mut tmp_vec: Vec<Polyline> = vec.into_iter().map(|mut v| {
                 v.shrink_to_fit();
                 let p = Polyline {
                     ptr: v.as_mut_ptr(),
@@ -44,23 +44,29 @@ pub extern fn svg_str_to_polylines(
                 };
                 mem::forget(v);
                 p
-            }).collect();
-            tmp_vec.shrink_to_fit();
-            assert!(tmp_vec.len() == tmp_vec.capacity());
+             }).collect();
 
-            // Return number of polylines
-            unsafe { *polylines_len = tmp_vec.len() as size_t; }
+    if tmp_vec.len() > 0 {
+        tmp_vec.shrink_to_fit();
+        assert!(tmp_vec.len() == tmp_vec.capacity());
 
-            // Return pointer to data
-            unsafe { *polylines = tmp_vec.as_mut_ptr(); }
+        // Return number of polylines
+        unsafe { *polylines_len = tmp_vec.len() as size_t; }
 
-            // Prevent memory from being deallocated
-            mem::forget(tmp_vec);
+        // Return pointer to data
+        unsafe { *polylines = tmp_vec.as_mut_ptr(); }
 
-            0
-        },
-        Err(_) => 1
+        // Prevent memory from being deallocated
+        mem::forget(tmp_vec);
+        0
+
+    } else {
+        1
     }
+
+
+
+
 }
 
 #[no_mangle]
