@@ -1,5 +1,5 @@
 target
 Cargo.lock
 *.swp
-svg/
+/svg/
 .DS_Store
