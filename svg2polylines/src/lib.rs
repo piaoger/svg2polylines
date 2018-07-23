@@ -18,7 +18,7 @@
 //! You can optionally get serde 1 support by enabling the `use_serde` feature.
 #[macro_use] extern crate log;
 extern crate svgparser;
-extern crate lyon_bezier;
+extern crate lyon_geom;
 
 #[cfg(feature="use_serde")]
 extern crate serde;
@@ -31,7 +31,8 @@ use std::str;
 
 use svgparser::{path, AttributeId, FromSpan};
 use svgparser::svg::{Tokenizer, Token};
-use lyon_bezier::{QuadraticBezierSegment, CubicBezierSegment, Point};
+use lyon_geom::{QuadraticBezierSegment, CubicBezierSegment};
+use lyon_geom::math::{Point};
 
 const FLATTENING_TOLERANCE: f32 = 0.15;
 
