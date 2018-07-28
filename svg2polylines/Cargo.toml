@@ -13,8 +13,6 @@ include = [
     "LICENSE-*",
 ]
 
-
-
 [features]
 default = []
 use_serde = ["serde", "serde_derive"]
@@ -25,6 +23,9 @@ log = "^0.4"
 serde = { version = "^1.0", optional = true }
 serde_derive = { version = "^1.0", optional = true }
 lyon_geom = "^0.11"
+svg = "0.5.11"
+haikunator = "^0.1"
+dxf = "0.3.0"
 
 [dev-dependencies]
 env_logger = "^0.5"

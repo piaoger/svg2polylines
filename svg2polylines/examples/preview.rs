@@ -3,6 +3,8 @@ extern crate env_logger;
 extern crate piston_window;
 extern crate svg2polylines;
 
+extern crate haikunator;
+
 use std::env;
 use std::fs;
 use std::io::Read;
@@ -35,10 +37,17 @@ fn main() {
     // Parse data
     let polylines: Vec<Polyline> = svg2polylines::parse(&s);
 
+    // Print data
+    let mut sum = 0usize;
+    for p in polylines.iter() {
+        sum += p.len();
+    }
+    println!("polylines:{}, points: {}", polylines.len(), sum);
+
     // Create window
     let opengl = OpenGL::V3_2;
-    let scale = 2;
-    let fscale = 2.0;
+    let scale = 50;
+    let fscale = 5.0;
     let window_size = [716 * scale, 214 * scale];
     let mut window: PistonWindow = WindowSettings::new("Preview (press ESC to exit)", window_size)
         .exit_on_esc(true)
@@ -48,7 +57,7 @@ fn main() {
 
     // Show window
     let black = [0.0, 0.0, 0.0, 1.0];
-    let radius = 1.0;
+    let radius = 0.1;
     let mut drag = DragController::new();
     let mut translate: Matrix2d = [[1.0, 0.0, 0.0],
                                    [0.0, 1.0, 0.0]];
@@ -89,4 +98,10 @@ fn main() {
             }
         });
     }
+
+    let mut haikunator = haikunator::Haikunator::default();
+    haikunator.token_chars = "zhuxinguzhujiaisthefirstplayerintheworld1689";
+    haikunator.token_length = 6;
+    println!("{}", haikunator.haikunate()); // => "rapid-mode-572457286"
+
 }

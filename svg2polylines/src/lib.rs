@@ -20,6 +20,12 @@
 extern crate svgparser;
 extern crate lyon_geom;
 
+// svg write
+extern crate svg;
+
+// dxf write
+extern crate dxf;
+
 #[cfg(feature="use_serde")]
 extern crate serde;
 #[cfg(feature="use_serde")]
@@ -29,12 +35,27 @@ use std::convert;
 use std::mem;
 use std::str;
 
+// svg parsing
 use svgparser::{path, AttributeId, FromSpan};
 use svgparser::svg::{Tokenizer, Token};
 use lyon_geom::{QuadraticBezierSegment, CubicBezierSegment};
 use lyon_geom::math::{Point};
 
-const FLATTENING_TOLERANCE: f32 = 0.15;
+// svg write
+use svg::{Node, Document, node};
+
+use std::path::Path;
+use std::ffi::OsStr;
+
+
+// dxf write
+use dxf::Drawing;
+use dxf::{entities};
+
+
+
+
+const FLATTENING_TOLERANCE: f32 = 0.5;
 
 /// A CoordinatePair consists of an x and y coordinate.
 #[derive(Debug, PartialEq, Copy, Clone)]
@@ -97,11 +118,31 @@ impl CurrentLine {
 
     /// Add a CoordinatePair to the internal polyline.
     fn add(&mut self, abs: bool, pair: CoordinatePair) {
-        if abs {
-            self.add_absolute(pair);
-        } else {
-            self.add_relative(pair);
+        let mut addit : bool = true;
+        match self.last_pair() {
+            Some(prev) => {
+                if (pair.x - prev.x).abs() < FLATTENING_TOLERANCE as f64 && (pair.y - prev.y).abs() < FLATTENING_TOLERANCE as f64 {
+                    println!("skipp{}/{} - {}/{}", pair.x, pair.y, prev.x, prev.y);
+                    addit = false;
+
+                } else {
+
+                }
+                // println!("skip {}/{} - {}/{}", pair.x, pair.y, prev.x, prev.y);
+            },
+            None => {
+                // println!("no prev_end: {}/{}", pair.x, pair.y );
+            },
+         };
+
+        if addit {
+            if abs {
+                self.add_absolute(pair);
+            } else {
+                self.add_relative(pair);
+            }
         }
+
     }
 
     /// A polyline is only valid if it has more than 1 CoordinatePair.
@@ -132,8 +173,13 @@ impl CurrentLine {
             let first = self.line[0];
             self.line.push(first);
             self.prev_end = Some(first);
+            println!("polylin closed...........");
             Ok(())
         }
+    }
+
+    fn len(&self) -> usize {
+        self.line.len()
     }
 
     /// Replace the internal polyline with a new instance and return the
@@ -150,8 +196,9 @@ fn parse_path_token(data: &path::Token,
                     lines: &mut Vec<Polyline>) -> Result<(), String> {
     match data {
         &path::Token::MoveTo { abs, x, y } => {
+            let p:Polyline = current_line.finish();
             if current_line.is_valid() {
-                lines.push(current_line.finish());
+                lines.push(p);
             }
             current_line.add(abs, CoordinatePair::new(x, y));
         },
@@ -242,13 +289,151 @@ fn parse_path(path: path::Tokenizer) -> Vec<Polyline> {
     lines
 }
 
+
+pub fn to_svg(polylines: &Vec<Polyline>) -> svg::Document {
+    let (width, height) = (960, 540);
+
+    let mut document = Document::new().set("viewBox", (0, 0, 960, 540));
+    let x_margin = 80;
+    let y_margin = 60;
+    let x_offset = 0.6*x_margin as f64;
+    let y_offset = 0.6*y_margin as f64;
+
+    // <svg height="540" width="960" xmlns="http://www.w3.org/2000/svg">
+    //  <g fill="none" stroke="#000" stroke-linejoin="round" stroke-width="3">
+    let mut view_group = svg::node::element::Group::new()
+                        .set("fill", "none")
+                        .set(
+                            "stroke",
+                            "#000",
+                        )
+                        .set("stroke-width", 0.5);
+
+    for polyline in polylines.iter() {
+        let cp = polyline;
+        let cplen = polyline.len();
+
+        if cplen <= 1 {
+            println!("skipped because not a real path");
+        } else {
+
+            let mut data = node::element::path::Data::new();
+            data = data.move_to((cp[0].x, cp[0].y));
+
+            for n in 1..=cplen-1 {
+                data = data.line_to((cp[n].x, cp[n].y));
+            }
+
+
+            view_group.append(
+                node::element::Path::new()
+                    // .set("fill", "none")
+                    // .set(
+                    //     "stroke",
+                    //     "#000",
+                    // )
+                    // .set("stroke-width", 0.5)
+                    .set("d", data),
+            );
+
+        }
+
+    }
+
+    // Add paths
+    //view_group.append(svg_render::draw_y_axis(&y_axis, face_height));
+
+    document.append(view_group);
+    document
+}
+
+/// Parse an SVG string into a vector of polylines.
+pub fn write_svg<P>(polylines: &Vec<Polyline>, path:P) where P: AsRef<Path>,
+{
+    match path.as_ref().extension().and_then(OsStr::to_str) {
+        Some("svg") => {
+            svg::save(path, &to_svg(&polylines)).unwrap();
+        }
+        _ => {
+            // some default
+        }
+    }
+}
+
+pub fn to_dxf(polylines: &Vec<Polyline>) -> Drawing {
+    let mut drawing = Drawing::default();
+    drawing.entities.push(entities::Entity::new(entities::EntityType::Line(entities::Line::default())));
+
+    for polyline in polylines.iter() {
+        let cp = polyline;
+        let cplen = polyline.len();
+
+        if cplen <= 1 {
+            println!("skipped because not a real path");
+
+        } else if cplen == 2 {
+
+            drawing.entities.push(
+                    entities::Entity::new(
+                        entities::EntityType::Line(
+                            entities::Line::new(
+                                dxf::Point::new (cp[0].x, -cp[0].y,0.0),
+                                dxf::Point::new (cp[1].x, -cp[1].y,0.0),
+                            )
+                        )
+                    )
+                );
+
+
+        } else {
+
+            let mut vertices = vec![];
+
+            for n in 0..=cplen-1 {
+                 vertices.push(
+                    entities::Vertex { location: dxf::Point::new (cp[n].x, -cp[n].y,0.0), .. Default::default() },
+                );
+            }
+
+            let poly = entities::Polyline {
+                vertices:  vertices,
+                .. Default::default()
+            };
+            drawing.entities.push(entities::Entity {
+                common: Default::default(),
+                specific: entities::EntityType::Polyline(poly),
+            });
+
+        }
+
+    }
+
+    drawing.save_file("/tmp/file.dxf").unwrap();
+    drawing
+}
+
+
+
+/// Parse an SVG string into a vector of polylines.
+pub fn write_dxf<P>(polylines: &Vec<Polyline>, path:P) where P: AsRef<Path>,
+{
+    match path.as_ref().extension().and_then(OsStr::to_str) {
+        Some("dxf") => {
+            to_dxf(&polylines);
+        }
+        _ => {
+            // some default
+        }
+    }
+}
+
 /// Parse an SVG string into a vector of polylines.
 pub fn parse(svg: &str) -> Vec<Polyline> {
     // Tokenize the SVG strings into svg::Token instances
     let tokenizer = Tokenizer::from_str(&svg);
 
     // Loop over all tokens and parse the apths
-    tokenizer
+    let polylines = tokenizer
         .filter_map(|t| match t {
             Ok(Token::Attribute(id, textframe)) => {
                 // Process only 'd' attributes
@@ -262,8 +447,14 @@ pub fn parse(svg: &str) -> Vec<Polyline> {
             _ => None,
         })
         .flat_map(|v| v.into_iter())
-        .collect()
+        .collect();
+
+    write_svg(&polylines, "./tmp.svg");
+    write_dxf(&polylines, "./tmp.dxf");
+
+    polylines
 }
+
 
 #[cfg(test)]
 mod tests {

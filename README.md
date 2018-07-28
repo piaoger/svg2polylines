@@ -173,6 +173,16 @@ Licensed under either of
    http://opensource.org/licenses/MIT) at your option.
 
 
+## refs
+
+svgbob: https://github.com/ivanceras/svgbobrus
+
+svg: https://github.com/bodoni/svg
+
+plotlib: https://github.com/milliams/plotlib
+
+
+
 ### Contribution
 
 Unless you explicitly state otherwise, any contribution intentionally submitted

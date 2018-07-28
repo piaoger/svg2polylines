@@ -31,6 +31,13 @@ fn main() {
     let polylines: Vec<Polyline> = svg2polylines::parse(&s);
 
     // Print data
+    let mut sum = 0usize;
+    for p in polylines.iter() {
+        sum += p.len();
+    }
+    println!("polylines:{}, points: {}", polylines.len(), sum);
+
+    // Print data
     println!("Found {} polylines.", polylines.len());
     for line in polylines {
         println!("- {:?}", line);
