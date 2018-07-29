@@ -27,6 +27,8 @@ svg = "0.5.11"
 haikunator = "^0.1"
 dxf = "0.3.0"
 geo = "0.9.1"
+geo-types = "0.1.1"
+
 
 [dev-dependencies]
 env_logger = "^0.5"

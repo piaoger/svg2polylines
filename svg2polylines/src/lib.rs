@@ -26,6 +26,10 @@ extern crate svg;
 // dxf write
 extern crate dxf;
 
+// simplify
+extern crate geo;
+extern crate geo_types;
+
 #[cfg(feature="use_serde")]
 extern crate serde;
 #[cfg(feature="use_serde")]
@@ -53,9 +57,16 @@ use dxf::Drawing;
 use dxf::{entities};
 
 
+// simplify
+// RDP
+use geo::algorithm::simplify::Simplify;
+//Visvalingam-Whyatt
+use geo::algorithm::simplifyvw::SimplifyVW;
+use geo::algorithm::simplifyvw::SimplifyVWPreserve;
+use geo::{Coordinate, LineString};
+//use geo_types::{Coordinate, LineString};
 
-
-const FLATTENING_TOLERANCE: f32 = 0.5;
+const FLATTENING_TOLERANCE: f32 = 0.5f32;
 
 /// A CoordinatePair consists of an x and y coordinate.
 #[derive(Debug, PartialEq, Copy, Clone)]
@@ -122,7 +133,7 @@ impl CurrentLine {
         match self.last_pair() {
             Some(prev) => {
                 if (pair.x - prev.x).abs() < FLATTENING_TOLERANCE as f64 && (pair.y - prev.y).abs() < FLATTENING_TOLERANCE as f64 {
-                    println!("skipp{}/{} - {}/{}", pair.x, pair.y, prev.x, prev.y);
+                    //println!("skipp{}/{} - {}/{}", pair.x, pair.y, prev.x, prev.y);
                     addit = false;
 
                 } else {
@@ -314,7 +325,7 @@ pub fn to_svg(polylines: &Vec<Polyline>) -> svg::Document {
         let cplen = polyline.len();
 
         if cplen <= 1 {
-            println!("skipped because not a real path");
+            println!("svg: skipped because not a real path");
         } else {
 
             let mut data = node::element::path::Data::new();
@@ -362,14 +373,14 @@ pub fn write_svg<P>(polylines: &Vec<Polyline>, path:P) where P: AsRef<Path>,
 
 pub fn to_dxf(polylines: &Vec<Polyline>) -> Drawing {
     let mut drawing = Drawing::default();
-    drawing.entities.push(entities::Entity::new(entities::EntityType::Line(entities::Line::default())));
+    //drawing.entities.push(entities::Entity::new(entities::EntityType::Line(entities::Line::default())));
 
     for polyline in polylines.iter() {
         let cp = polyline;
         let cplen = polyline.len();
 
         if cplen <= 1 {
-            println!("skipped because not a real path");
+            println!("dxf: skipped because not a real path: {}", cplen);
 
         } else if cplen == 2 {
 
@@ -427,6 +438,64 @@ pub fn write_dxf<P>(polylines: &Vec<Polyline>, path:P) where P: AsRef<Path>,
     }
 }
 
+pub fn simplify(polylines: &Vec<Polyline>) -> Vec<Polyline>{
+
+    let mut simplifyvec = Vec::new();
+
+    for polyline in polylines.iter() {
+        let cp = polyline;
+        let cplen = polyline.len();
+
+        if  cplen <= 1  {
+            println!("simplify: skipped because not a real path");
+
+        }else if cplen <= 2 {
+            if (cp[1].x - cp[0].x).abs() > FLATTENING_TOLERANCE as f64 && (cp[1].y - cp[1].y).abs() > FLATTENING_TOLERANCE as f64 {
+                let mut poly = Polyline::new();
+
+                poly.push(CoordinatePair::new(cp[0].x, cp[0].y));
+                poly.push(CoordinatePair::new(cp[1].x, cp[1].y));
+
+                simplifyvec.push(poly);
+            }
+
+        }  else {
+
+            let mut vec = Vec::new();
+
+            for n in 0..=cplen-1 {
+                vec.push(geo::Point::new(cp[n].x, cp[n].y));
+
+            }
+
+            let linestring = LineString::from(vec);
+            let simplified = linestring.simplifyvw(&(FLATTENING_TOLERANCE as f64));
+
+            let mut poly = Polyline::new();
+            for i in simplified {
+                //println!("x:{} , y:{}", i.x(), i.y() );
+              //  let cp = CoordinatePair::new(i.x(), i.y());
+
+                poly.push(CoordinatePair::new(i.x(), i.y()));
+            }
+
+
+            simplifyvec.push(poly);
+
+            //simplifyvec
+
+           // let points :geo::LineString<f64> = simplified.into_points();
+
+            //println!("before:{}, after: {}", cplen, points.len() / 2.0);
+
+        }
+
+    }
+
+    simplifyvec
+
+}
+
 /// Parse an SVG string into a vector of polylines.
 pub fn parse(svg: &str) -> Vec<Polyline> {
     // Tokenize the SVG strings into svg::Token instances
@@ -449,10 +518,24 @@ pub fn parse(svg: &str) -> Vec<Polyline> {
         .flat_map(|v| v.into_iter())
         .collect();
 
-    write_svg(&polylines, "./tmp.svg");
-    write_dxf(&polylines, "./tmp.dxf");
+    let dosimplify = "simplify";
+    let nosimplify = "no";
 
-    polylines
+    let stratege =  "simplify";// "post-simplify", "no"
+
+    if stratege == dosimplify {
+        let simplifyvec = simplify(&polylines);
+        write_svg(&simplifyvec, "./tmp.svg");
+        write_dxf(&simplifyvec, "./tmp.dxf");
+        write_svg(&polylines, "./tmp-no.svg");
+        simplifyvec
+
+    } else {
+        write_svg(&polylines, "./tmp-no.svg");
+        write_dxf(&polylines, "./tmp-no.dxf");
+
+        polylines
+    }
 }
 
 
