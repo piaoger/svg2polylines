@@ -373,7 +373,6 @@ pub fn write_svg<P>(polylines: &Vec<Polyline>, path:P) where P: AsRef<Path>,
 
 pub fn to_dxf(polylines: &Vec<Polyline>) -> Drawing {
     let mut drawing = Drawing::default();
-    //drawing.entities.push(entities::Entity::new(entities::EntityType::Line(entities::Line::default())));
 
     for polyline in polylines.iter() {
         let cp = polyline;
