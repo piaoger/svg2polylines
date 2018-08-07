@@ -374,8 +374,8 @@ pub fn write_svg<P>(polylines: &Vec<Polyline>, path:P) where P: AsRef<Path>,
 
 pub fn to_dxf(polylines: &Vec<Polyline>) -> Drawing {
     let mut drawing = Drawing::default();
-    drawing.header.version = AcadVersion::R2000;
-    header.handles_enabled = false;
+    drawing.header.version = AcadVersion::R2004;
+    //drawing.header.handles_enabled = false;
 
     //     drawing.header.set_end_point_snap(false);
     // drawing.header.set_mid_point_snap(false);
@@ -414,31 +414,85 @@ pub fn to_dxf(polylines: &Vec<Polyline>) -> Drawing {
 
         } else {
 
-            let mut vertices = vec![];
+            let use_polyline = true;
 
-            for n in 0..=cplen-1 {
-                 vertices.push(
-                    entities::Vertex { location: dxf::Point::new (cp[n].x, -cp[n].y,0.0), .. Default::default() },
+            if use_polyline {
+
+                let mut vertices = vec![];
+
+                for n in 0..=cplen-1 {
+                     vertices.push(
+                        entities::Vertex { location: dxf::Point::new (cp[n].x, -cp[n].y,0.0), .. Default::default() },
+                    );
+                }
+
+                let poly = entities::Polyline {
+                    vertices:  vertices,
+                    .. Default::default()
+                };
+                drawing.entities.push(entities::Entity {
+                    common: Default::default(),
+                    specific: entities::EntityType::Polyline(poly),
+                });
+
+            } else {
+
+                let mut poly = entities::LwPolyline::default();
+                //poly.constant_width = 43.0;
+                for n in 0..=cplen-1 {
+                    poly.vertices.push(dxf::LwPolylineVertex {
+                        x: cp[n].x,
+                        y: -cp[n].y,
+                        .. Default::default()
+                    });
+                }
+
+                drawing.entities.push(
+                    entities::Entity::new(
+                        entities::EntityType::LwPolyline(poly)
+                    )
                 );
             }
-
-            let poly = entities::Polyline {
-                vertices:  vertices,
-                .. Default::default()
-            };
-            drawing.entities.push(entities::Entity {
-                common: Default::default(),
-                specific: entities::EntityType::Polyline(poly),
-            });
-
         }
-
     }
 
     drawing.save_file("./file.dxf").unwrap();
     drawing
 }
 
+
+fn test_dxf_r12(){
+    let mut drawing = Drawing::default();
+    drawing.entities.push(
+        entities::Entity::new(
+            entities::EntityType::Line(
+                entities::Line::new(
+                    dxf::Point::new (0.0, 0.0,0.0),
+                    dxf::Point::new (5.0, 5.0,0.0),
+                )
+            )
+        )
+    );
+
+    drawing.save_file("./file-r12.dxf").unwrap();
+}
+
+
+fn test_dxf_r2014(){
+    let mut drawing = Drawing::default();
+    drawing.header.version = AcadVersion::R2004;
+    drawing.entities.push(
+        entities::Entity::new(
+            entities::EntityType::Line(
+                entities::Line::new(
+                    dxf::Point::new (0.0, 0.0,0.0),
+                    dxf::Point::new (5.0, 5.0,0.0),
+                )
+            )
+        )
+    );
+    drawing.save_file("./file-r2004.dxf").unwrap();
+}
 
 
 /// Parse an SVG string into a vector of polylines.
@@ -534,6 +588,10 @@ pub fn parse(svg: &str) -> Vec<Polyline> {
         .flat_map(|v| v.into_iter())
         .collect();
 
+    // test only
+    test_dxf_r12();
+    test_dxf_r2014();
+
     let dosimplify = "simplify";
     let nosimplify = "no";
 
@@ -552,6 +610,8 @@ pub fn parse(svg: &str) -> Vec<Polyline> {
 
         polylines
     }
+
+
 }
 
 
@@ -762,3 +822,4 @@ mod tests {
     }
 
 }
+
