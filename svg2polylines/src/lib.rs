@@ -54,6 +54,7 @@ use std::ffi::OsStr;
 
 // dxf write
 use dxf::Drawing;
+use dxf::enums::AcadVersion;
 use dxf::{entities};
 
 
@@ -373,6 +374,22 @@ pub fn write_svg<P>(polylines: &Vec<Polyline>, path:P) where P: AsRef<Path>,
 
 pub fn to_dxf(polylines: &Vec<Polyline>) -> Drawing {
     let mut drawing = Drawing::default();
+    drawing.header.version = AcadVersion::R2000;
+    header.handles_enabled = false;
+
+    //     drawing.header.set_end_point_snap(false);
+    // drawing.header.set_mid_point_snap(false);
+    // drawing.header.set_center_snap(true);
+    // drawing.header.set_node_snap(true);
+    // drawing.header.set_quadrant_snap(false);
+    // drawing.header.set_intersection_snap(false);
+    // drawing.header.set_insertion_snap(false);
+    // drawing.header.set_perpendicular_snap(false);
+    // drawing.header.set_tangent_snap(false);
+    // drawing.header.set_nearest_snap(false);
+    // drawing.header.set_apparent_intersection_snap(false);
+    // drawing.header.set_extension_snap(false);
+    // drawing.header.set_parallel_snap(false);
 
     for polyline in polylines.iter() {
         let cp = polyline;
@@ -418,7 +435,7 @@ pub fn to_dxf(polylines: &Vec<Polyline>) -> Drawing {
 
     }
 
-    drawing.save_file("/tmp/file.dxf").unwrap();
+    drawing.save_file("./file.dxf").unwrap();
     drawing
 }
 
