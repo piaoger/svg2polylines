@@ -374,6 +374,7 @@ pub fn write_svg<P>(polylines: &Vec<Polyline>, path:P) where P: AsRef<Path>,
 
 pub fn to_dxf(polylines: &Vec<Polyline>) -> Drawing {
     let mut drawing = Drawing::default();
+    drawing.normalize();
     drawing.header.version = AcadVersion::R2004;
     //drawing.header.handles_enabled = false;
 
@@ -463,6 +464,7 @@ pub fn to_dxf(polylines: &Vec<Polyline>) -> Drawing {
 
 fn test_dxf_r12(){
     let mut drawing = Drawing::default();
+    drawing.normalize();
     drawing.entities.push(
         entities::Entity::new(
             entities::EntityType::Line(
@@ -480,6 +482,7 @@ fn test_dxf_r12(){
 
 fn test_dxf_r2014(){
     let mut drawing = Drawing::default();
+    drawing.normalize();
     drawing.header.version = AcadVersion::R2004;
     drawing.entities.push(
         entities::Entity::new(
