@@ -25,9 +25,10 @@ serde_derive = { version = "^1.0", optional = true }
 lyon_geom = "^0.11"
 svg = "0.5.11"
 haikunator = "^0.1"
-
 geo = "0.9.1"
 geo-types = "0.1.1"
+which = "1.0.5"
+
 
 [dependencies.dxf]
 git = "https://github.com/IxMilia/dxf-rs.git"

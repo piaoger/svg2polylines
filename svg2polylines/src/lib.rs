@@ -378,7 +378,7 @@ pub fn to_dxf(polylines: &Vec<Polyline>) -> Drawing {
     drawing.header.version = AcadVersion::R2004;
     //drawing.header.handles_enabled = false;
 
-    //     drawing.header.set_end_point_snap(false);
+    // drawing.header.set_end_point_snap(false);
     // drawing.header.set_mid_point_snap(false);
     // drawing.header.set_center_snap(true);
     // drawing.header.set_node_snap(true);
@@ -457,7 +457,7 @@ pub fn to_dxf(polylines: &Vec<Polyline>) -> Drawing {
         }
     }
 
-    drawing.save_file("./file.dxf").unwrap();
+
     drawing
 }
 
@@ -503,7 +503,9 @@ pub fn write_dxf<P>(polylines: &Vec<Polyline>, path:P) where P: AsRef<Path>,
 {
     match path.as_ref().extension().and_then(OsStr::to_str) {
         Some("dxf") => {
-            to_dxf(&polylines);
+            let drawing = to_dxf(&polylines);
+                let pathstr = path.as_ref().to_string_lossy() ;
+                drawing.save_file(&pathstr).unwrap();
         }
         _ => {
             // some default
@@ -591,31 +593,31 @@ pub fn parse(svg: &str) -> Vec<Polyline> {
         .flat_map(|v| v.into_iter())
         .collect();
 
-    // test only
-    test_dxf_r12();
-    test_dxf_r2014();
-
-    let dosimplify = "simplify";
-    let nosimplify = "no";
-
-    let stratege =  "simplify";// "post-simplify", "no"
-
-    if stratege == dosimplify {
-        let simplifyvec = simplify(&polylines);
-        write_svg(&simplifyvec, "./tmp.svg");
-        write_dxf(&simplifyvec, "./tmp.dxf");
-        write_svg(&polylines, "./tmp-no.svg");
-        simplifyvec
-
-    } else {
-        write_svg(&polylines, "./tmp-no.svg");
-        write_dxf(&polylines, "./tmp-no.dxf");
-
-        polylines
-    }
-
-
+    polylines
 }
+
+    // // test only
+    // test_dxf_r12();
+    // test_dxf_r2014();
+
+    // let dosimplify = "simplify";
+    // let nosimplify = "no";
+
+    // let stratege =  "simplify";// "post-simplify", "no"
+
+    // if stratege == dosimplify {
+    //     let simplifyvec = simplify(&polylines);
+    //     write_svg(&simplifyvec, "./tmp.svg");
+    //     write_dxf(&simplifyvec, "./tmp.dxf");
+    //     write_svg(&polylines, "./tmp-no.svg");
+    //     simplifyvec
+
+    // } else {
+    //     write_svg(&polylines, "./tmp-no.svg");
+    //     write_dxf(&polylines, "./tmp-no.dxf");
+
+    //     polylines
+    // }
 
 
 #[cfg(test)]
