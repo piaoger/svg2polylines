@@ -126,9 +126,9 @@ fn main() {
 
     fs::create_dir_all("/tmp/svgproc").unwrap();
 
-        if !Path::new(&output_dir).exists() {
-    fs::create_dir_all(&output_dir).unwrap();
-}
+    if !Path::new(&output_dir).exists() {
+        fs::create_dir_all(&output_dir).unwrap();
+    }
 
     svg2polylines::write_svg(&simplifyvec, output_dir.to_owned() + "/"+ &file_stem.to_owned()+".svg");
     svg2polylines::write_dxf(&simplifyvec, "/tmp/svgproc/".to_owned() + &file_stem.to_owned()+".dxf");
