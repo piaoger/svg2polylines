@@ -9,11 +9,11 @@ use std::process::exit;
 
 use svg2polylines::Polyline;
 
-use std::path::Path;
 use std::ffi::OsStr;
+use std::path::Path;
 
-use std::process::Command;
 use std::path::PathBuf;
+use std::process::Command;
 
 fn path_to_string(path: PathBuf) -> Option<String> {
     match path.into_os_string().into_string() {
@@ -44,17 +44,16 @@ fn dwgconvert() -> Command {
     match std::env::current_exe() {
         Err(_) => {
             println!("The process path could not be determined");
-
-        },
+        }
         Ok(p) => {
             let parent = p.parent().unwrap().to_path_buf();
             match path_to_string(parent) {
                 None => (),
                 Some(s) => {
                     add_path_env_var(&s);
-                },
+                }
             }
-        },
+        }
     }
 
     match find_dwgconvert() {
@@ -95,11 +94,11 @@ fn main() {
     // Argument parsing
     let args: Vec<_> = env::args().collect();
     match args.len() {
-        3 => {},
+        3 => {}
         _ => {
             println!("Usage: {} <path/to/file.svg>  <path/to/dir>", args[0]);
             exit(1);
-        },
+        }
     };
 
     // Load file
@@ -110,15 +109,29 @@ fn main() {
 
     let output_dir = &args[2];
 
-    // Parse data
-    let polylines: Vec<Polyline> = svg2polylines::parse(&s);
-    let simplifyvec = svg2polylines::simplify(&polylines);
-
     let input_path = Path::new(&input_pathstr);
     let file_stem = input_path
         .file_stem()
         .and_then(|os| os.to_str())
         .unwrap_or("output");
+
+    let ext = input_path
+        .extension()
+        .and_then(|os| os.to_str())
+        .unwrap_or("");
+
+    let polylines: Vec<Polyline> = match ext {
+        "svg" => svg2polylines::parse_svg(&s),
+        "dxf" => svg2polylines::parse_dxf(&s),
+        _ => {
+            // some default
+            vec![]
+        }
+    };
+
+    // Parse data
+
+    let simplifyvec = svg2polylines::simplify(&polylines);
 
     if Path::new("/tmp/svgproc").exists() {
         fs::remove_dir_all("/tmp/svgproc").unwrap();
@@ -130,11 +143,20 @@ fn main() {
         fs::create_dir_all(&output_dir).unwrap();
     }
 
-    svg2polylines::write_svg(&simplifyvec, output_dir.to_owned() + "/"+ &file_stem.to_owned()+".svg");
-    svg2polylines::write_dxf(&simplifyvec, "/tmp/svgproc/".to_owned() + &file_stem.to_owned()+".dxf");
+    svg2polylines::write_svg(
+        &simplifyvec,
+        output_dir.to_owned() + "/" + &file_stem.to_owned() + ".svg",
+    );
+    svg2polylines::write_dxf(
+        &simplifyvec,
+        "/tmp/svgproc/".to_owned() + &file_stem.to_owned() + ".dxf",
+    );
     //svg2polylines::write_svg(&polylines, output_dir.to_owned() + "/"+ &file_stem.to_owned()+"-rewrite.svg");
 
-    convert_dxf(&("/tmp/svgproc/".to_owned()+ &file_stem.to_owned()+".dxf"), &output_dir);
+    convert_dxf(
+        &("/tmp/svgproc/".to_owned() + &file_stem.to_owned() + ".dxf"),
+        &output_dir,
+    );
 
     // Print data
     let mut sum = 0usize;

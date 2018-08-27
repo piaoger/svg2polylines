@@ -16,9 +16,10 @@
 //! Github](https://github.com/dbrgn/svg2polylines).
 //!
 //! You can optionally get serde 1 support by enabling the `use_serde` feature.
-#[macro_use] extern crate log;
-extern crate svgparser;
+#[macro_use]
+extern crate log;
 extern crate lyon_geom;
+extern crate svgparser;
 
 // svg write
 extern crate svg;
@@ -30,34 +31,32 @@ extern crate dxf;
 extern crate geo;
 extern crate geo_types;
 
-#[cfg(feature="use_serde")]
+#[cfg(feature = "use_serde")]
 extern crate serde;
-#[cfg(feature="use_serde")]
-#[macro_use] extern crate serde_derive;
+#[cfg(feature = "use_serde")]
+#[macro_use]
+extern crate serde_derive;
 
 use std::convert;
 use std::mem;
 use std::str;
 
 // svg parsing
+use lyon_geom::math::Point;
+use lyon_geom::{CubicBezierSegment, QuadraticBezierSegment};
+use svgparser::svg::{Token, Tokenizer};
 use svgparser::{path, AttributeId, FromSpan};
-use svgparser::svg::{Tokenizer, Token};
-use lyon_geom::{QuadraticBezierSegment, CubicBezierSegment};
-use lyon_geom::math::{Point};
 
 // svg write
-use svg::{Node, Document, node};
+use svg::{node, Document, Node};
 
-use std::path::Path;
 use std::ffi::OsStr;
-
+use std::path::Path;
 
 // dxf write
-use dxf::Drawing;
+use dxf::entities::{self, EntityType};
 use dxf::enums::AcadVersion;
-use dxf::{entities};
-
-
+use dxf::{Drawing, DxfResult};
 // simplify
 // RDP
 use geo::algorithm::simplify::Simplify;
@@ -130,22 +129,23 @@ impl CurrentLine {
 
     /// Add a CoordinatePair to the internal polyline.
     fn add(&mut self, abs: bool, pair: CoordinatePair) {
-        let mut addit : bool = true;
+        let mut addit: bool = true;
         match self.last_pair() {
             Some(prev) => {
-                if (pair.x - prev.x).abs() < FLATTENING_TOLERANCE as f64 && (pair.y - prev.y).abs() < FLATTENING_TOLERANCE as f64 {
+                if (pair.x - prev.x).abs() < FLATTENING_TOLERANCE as f64
+                    && (pair.y - prev.y).abs() < FLATTENING_TOLERANCE as f64
+                {
                     //println!("skipp{}/{} - {}/{}", pair.x, pair.y, prev.x, prev.y);
                     addit = false;
-
                 } else {
 
                 }
                 // println!("skip {}/{} - {}/{}", pair.x, pair.y, prev.x, prev.y);
-            },
+            }
             None => {
                 // println!("no prev_end: {}/{}", pair.x, pair.y );
-            },
-         };
+            }
+        };
 
         if addit {
             if abs {
@@ -154,7 +154,6 @@ impl CurrentLine {
                 self.add_relative(pair);
             }
         }
-
     }
 
     /// A polyline is only valid if it has more than 1 CoordinatePair.
@@ -203,36 +202,43 @@ impl CurrentLine {
     }
 }
 
-fn parse_path_token(data: &path::Token,
-                    current_line: &mut CurrentLine,
-                    lines: &mut Vec<Polyline>) -> Result<(), String> {
+fn parse_path_token(
+    data: &path::Token,
+    current_line: &mut CurrentLine,
+    lines: &mut Vec<Polyline>,
+) -> Result<(), String> {
     match data {
         &path::Token::MoveTo { abs, x, y } => {
-            let p:Polyline = current_line.finish();
+            let p: Polyline = current_line.finish();
             if current_line.is_valid() {
                 lines.push(p);
             }
-            current_line.add(abs, CoordinatePair::new(x, y));
-        },
+            current_line.add(abs, CoordinatePair::new(x, -y));
+        }
         &path::Token::LineTo { abs, x, y } => {
-            current_line.add(abs, CoordinatePair::new(x, y));
+            current_line.add(abs, CoordinatePair::new(x, -y));
+        }
+        &path::Token::HorizontalLineTo { abs, x } => match (current_line.last_y(), abs) {
+            (Some(y), true) => current_line.add_absolute(CoordinatePair::new(x, -y)),
+            (Some(_), false) => current_line.add_relative(CoordinatePair::new(x, 0.0)),
+            (None, _) => return Err("Invalid state: HorizontalLineTo on emtpy CurrentLine".into()),
         },
-        &path::Token::HorizontalLineTo { abs, x } => {
-            match (current_line.last_y(), abs) {
-                (Some(y), true) => current_line.add_absolute(CoordinatePair::new(x, y)),
-                (Some(_), false) => current_line.add_relative(CoordinatePair::new(x, 0.0)),
-                (None, _) => return Err("Invalid state: HorizontalLineTo on emtpy CurrentLine".into()),
-            }
+        &path::Token::VerticalLineTo { abs, y } => match (current_line.last_x(), abs) {
+            (Some(x), true) => current_line.add_absolute(CoordinatePair::new(x, -y)),
+            (Some(_), false) => current_line.add_relative(CoordinatePair::new(0.0, -y)),
+            (None, _) => return Err("Invalid state: VerticalLineTo on emtpy CurrentLine".into()),
         },
-        &path::Token::VerticalLineTo { abs, y } => {
-            match (current_line.last_x(), abs) {
-                (Some(x), true) => current_line.add_absolute(CoordinatePair::new(x, y)),
-                (Some(_), false) => current_line.add_relative(CoordinatePair::new(0.0, y)),
-                (None, _) => return Err("Invalid state: VerticalLineTo on emtpy CurrentLine".into()),
-            }
-        },
-        &path::Token::CurveTo { abs, x1, y1, x2, y2, x, y } => {
-            let current = current_line.last_pair()
+        &path::Token::CurveTo {
+            abs,
+            x1,
+            y1,
+            x2,
+            y2,
+            x,
+            y,
+        } => {
+            let current = current_line
+                .last_pair()
                 .ok_or("Invalid state: CurveTo on empty CurrentLine")?;
             let curve = if abs {
                 CubicBezierSegment {
@@ -250,11 +256,12 @@ fn parse_path_token(data: &path::Token,
                 }
             };
             for point in curve.flattened(FLATTENING_TOLERANCE) {
-                current_line.add_absolute(CoordinatePair::new(point.x as f64, point.y as f64));
+                current_line.add_absolute(CoordinatePair::new(point.x as f64, -point.y as f64));
             }
-        },
+        }
         &path::Token::Quadratic { abs, x1, y1, x, y } => {
-            let current = current_line.last_pair()
+            let current = current_line
+                .last_pair()
                 .ok_or("Invalid state: Quadratic on empty CurrentLine")?;
             let curve = if abs {
                 QuadraticBezierSegment {
@@ -270,12 +277,14 @@ fn parse_path_token(data: &path::Token,
                 }
             };
             for point in curve.flattened(FLATTENING_TOLERANCE) {
-                current_line.add_absolute(CoordinatePair::new(point.x as f64, point.y as f64));
+                current_line.add_absolute(CoordinatePair::new(point.x as f64, -point.y as f64));
             }
-        },
+        }
         &path::Token::ClosePath { .. } => {
-            current_line.close().map_err(|e| format!("Invalid state: {}", e))?;
-        },
+            current_line
+                .close()
+                .map_err(|e| format!("Invalid state: {}", e))?;
+        }
         d @ _ => {
             return Err(format!("Unsupported token: {:?}", d));
         }
@@ -291,7 +300,7 @@ fn parse_path(path: path::Tokenizer) -> Vec<Polyline> {
     let mut line = CurrentLine::new();
     for token in path {
         parse_path_token(&token, &mut line, &mut lines).unwrap();
-    };
+    }
 
     // Path parsing is done, add previously parsing line if valid
     if line.is_valid() {
@@ -301,25 +310,21 @@ fn parse_path(path: path::Tokenizer) -> Vec<Polyline> {
     lines
 }
 
-
 pub fn to_svg(polylines: &Vec<Polyline>) -> svg::Document {
     let (width, height) = (960, 540);
 
     let mut document = Document::new().set("viewBox", (0, 0, 960, 540));
     let x_margin = 80;
     let y_margin = 60;
-    let x_offset = 0.6*x_margin as f64;
-    let y_offset = 0.6*y_margin as f64;
+    let x_offset = 0.6 * x_margin as f64;
+    let y_offset = 0.6 * y_margin as f64;
 
     // <svg height="540" width="960" xmlns="http://www.w3.org/2000/svg">
     //  <g fill="none" stroke="#000" stroke-linejoin="round" stroke-width="3">
     let mut view_group = svg::node::element::Group::new()
-                        .set("fill", "none")
-                        .set(
-                            "stroke",
-                            "#000",
-                        )
-                        .set("stroke-width", 0.5);
+        .set("fill", "none")
+        .set("stroke", "#000")
+        .set("stroke-width", 0.5);
 
     for polyline in polylines.iter() {
         let cp = polyline;
@@ -328,28 +333,22 @@ pub fn to_svg(polylines: &Vec<Polyline>) -> svg::Document {
         if cplen <= 1 {
             println!("svg: skipped because not a real path");
         } else {
-
             let mut data = node::element::path::Data::new();
-            data = data.move_to((cp[0].x, cp[0].y));
+            data = data.move_to((cp[0].x, -cp[0].y));
 
-            for n in 1..=cplen-1 {
-                data = data.line_to((cp[n].x, cp[n].y));
+            for n in 1..=cplen - 1 {
+                data = data.line_to((cp[n].x, -cp[n].y));
             }
 
-
-            view_group.append(
-                node::element::Path::new()
+            view_group.append(node::element::Path::new()
                     // .set("fill", "none")
                     // .set(
                     //     "stroke",
                     //     "#000",
                     // )
                     // .set("stroke-width", 0.5)
-                    .set("d", data),
-            );
-
+                    .set("d", data));
         }
-
     }
 
     // Add paths
@@ -360,7 +359,9 @@ pub fn to_svg(polylines: &Vec<Polyline>) -> svg::Document {
 }
 
 /// Parse an SVG string into a vector of polylines.
-pub fn write_svg<P>(polylines: &Vec<Polyline>, path:P) where P: AsRef<Path>,
+pub fn write_svg<P>(polylines: &Vec<Polyline>, path: P)
+where
+    P: AsRef<Path>,
 {
     match path.as_ref().extension().and_then(OsStr::to_str) {
         Some("svg") => {
@@ -398,114 +399,99 @@ pub fn to_dxf(polylines: &Vec<Polyline>) -> Drawing {
 
         if cplen <= 1 {
             println!("dxf: skipped because not a real path: {}", cplen);
-
         } else if cplen == 2 {
-
-            drawing.entities.push(
-                    entities::Entity::new(
-                        entities::EntityType::Line(
-                            entities::Line::new(
-                                dxf::Point::new (cp[0].x, -cp[0].y,0.0),
-                                dxf::Point::new (cp[1].x, -cp[1].y,0.0),
-                            )
-                        )
-                    )
-                );
-
-
+            drawing
+                .entities
+                .push(entities::Entity::new(entities::EntityType::Line(
+                    entities::Line::new(
+                        dxf::Point::new(cp[0].x, cp[0].y, 0.0),
+                        dxf::Point::new(cp[1].x, cp[1].y, 0.0),
+                    ),
+                )));
         } else {
-
             let use_polyline = true;
 
             if use_polyline {
-
                 let mut vertices = vec![];
 
-                for n in 0..=cplen-1 {
-                     vertices.push(
-                        entities::Vertex { location: dxf::Point::new (cp[n].x, -cp[n].y,0.0), .. Default::default() },
-                    );
+                for n in 0..=cplen - 1 {
+                    vertices.push(entities::Vertex {
+                        location: dxf::Point::new(cp[n].x, cp[n].y, 0.0),
+                        ..Default::default()
+                    });
                 }
 
                 let poly = entities::Polyline {
-                    vertices:  vertices,
-                    .. Default::default()
+                    vertices: vertices,
+                    ..Default::default()
                 };
                 drawing.entities.push(entities::Entity {
                     common: Default::default(),
                     specific: entities::EntityType::Polyline(poly),
                 });
-
             } else {
-
                 let mut poly = entities::LwPolyline::default();
                 //poly.constant_width = 43.0;
-                for n in 0..=cplen-1 {
+                for n in 0..=cplen - 1 {
                     poly.vertices.push(dxf::LwPolylineVertex {
                         x: cp[n].x,
-                        y: -cp[n].y,
-                        .. Default::default()
+                        y: cp[n].y,
+                        ..Default::default()
                     });
                 }
 
-                drawing.entities.push(
-                    entities::Entity::new(
-                        entities::EntityType::LwPolyline(poly)
-                    )
-                );
+                drawing
+                    .entities
+                    .push(entities::Entity::new(entities::EntityType::LwPolyline(
+                        poly,
+                    )));
             }
         }
     }
 
-
     drawing
 }
 
-
-fn test_dxf_r12(){
+fn test_dxf_r12() {
     let mut drawing = Drawing::default();
     drawing.normalize();
-    drawing.entities.push(
-        entities::Entity::new(
-            entities::EntityType::Line(
-                entities::Line::new(
-                    dxf::Point::new (0.0, 0.0,0.0),
-                    dxf::Point::new (5.0, 5.0,0.0),
-                )
-            )
-        )
-    );
+    drawing
+        .entities
+        .push(entities::Entity::new(entities::EntityType::Line(
+            entities::Line::new(
+                dxf::Point::new(0.0, 0.0, 0.0),
+                dxf::Point::new(5.0, 5.0, 0.0),
+            ),
+        )));
 
     drawing.save_file("./file-r12.dxf").unwrap();
 }
 
-
-fn test_dxf_r2014(){
+fn test_dxf_r2014() {
     let mut drawing = Drawing::default();
     drawing.normalize();
     drawing.header.version = AcadVersion::R2004;
-    drawing.entities.push(
-        entities::Entity::new(
-            entities::EntityType::Line(
-                entities::Line::new(
-                    dxf::Point::new (0.0, 0.0,0.0),
-                    dxf::Point::new (5.0, 5.0,0.0),
-                )
-            )
-        )
-    );
+    drawing
+        .entities
+        .push(entities::Entity::new(entities::EntityType::Line(
+            entities::Line::new(
+                dxf::Point::new(0.0, 0.0, 0.0),
+                dxf::Point::new(5.0, 5.0, 0.0),
+            ),
+        )));
     drawing.save_file("./file-r2004.dxf").unwrap();
 }
 
-
 /// Parse an SVG string into a vector of polylines.
-pub fn write_dxf<P>(polylines: &Vec<Polyline>, path:P) where P: AsRef<Path>,
+pub fn write_dxf<P>(polylines: &Vec<Polyline>, path: P)
+where
+    P: AsRef<Path>,
 {
     match path.as_ref().extension().and_then(OsStr::to_str) {
         Some("dxf") => {
             let drawing = to_dxf(&polylines);
-                let pathstr = path.as_ref().to_string_lossy() ;
-                drawing.save_file(&pathstr).unwrap();
+            let pathstr = path.as_ref().to_string_lossy();
+            drawing.save_file(&pathstr).unwrap();
         }
         _ => {
             // some default
@@ -513,34 +499,34 @@ pub fn write_dxf<P>(polylines: &Vec<Polyline>, path:P) where P: AsRef<Path>,
     }
 }
 
-pub fn simplify(polylines: &Vec<Polyline>) -> Vec<Polyline>{
-
+pub fn simplify(polylines: &Vec<Polyline>) -> Vec<Polyline> {
     let mut simplifyvec = Vec::new();
 
     for polyline in polylines.iter() {
         let cp = polyline;
         let cplen = polyline.len();
 
-        if  cplen <= 1  {
+        if cplen <= 1 {
             println!("simplify: skipped because not a real path");
-
-        }else if cplen <= 2 {
-            if (cp[1].x - cp[0].x).abs() > FLATTENING_TOLERANCE as f64 && (cp[1].y - cp[1].y).abs() > FLATTENING_TOLERANCE as f64 {
+        } else if cplen <= 2 {
+            if (cp[1].x - cp[0].x).abs() > FLATTENING_TOLERANCE as f64
+                || (cp[1].y - cp[0].y).abs() > FLATTENING_TOLERANCE as f64
+            {
                 let mut poly = Polyline::new();
 
                 poly.push(CoordinatePair::new(cp[0].x, cp[0].y));
                 poly.push(CoordinatePair::new(cp[1].x, cp[1].y));
 
                 simplifyvec.push(poly);
+                println!("add {:?}-{:?}", cp[0], cp[1]);
+            } else {
+                println!("skip {:?}-{:?}", cp[0], cp[1]);
             }
-
-        }  else {
-
+        } else {
             let mut vec = Vec::new();
 
-            for n in 0..=cplen-1 {
+            for n in 0..=cplen - 1 {
                 vec.push(geo::Point::new(cp[n].x, cp[n].y));
-
             }
 
             let linestring = LineString::from(vec);
@@ -549,30 +535,26 @@ pub fn simplify(polylines: &Vec<Polyline>) -> Vec<Polyline>{
             let mut poly = Polyline::new();
             for i in simplified {
                 //println!("x:{} , y:{}", i.x(), i.y() );
-              //  let cp = CoordinatePair::new(i.x(), i.y());
+                //  let cp = CoordinatePair::new(i.x(), i.y());
 
                 poly.push(CoordinatePair::new(i.x(), i.y()));
             }
-
 
             simplifyvec.push(poly);
 
             //simplifyvec
 
-           // let points :geo::LineString<f64> = simplified.into_points();
+            // let points :geo::LineString<f64> = simplified.into_points();
 
             //println!("before:{}, after: {}", cplen, points.len() / 2.0);
-
         }
-
     }
 
     simplifyvec
-
 }
 
 /// Parse an SVG string into a vector of polylines.
-pub fn parse(svg: &str) -> Vec<Polyline> {
+pub fn parse_svg(svg: &str) -> Vec<Polyline> {
     // Tokenize the SVG strings into svg::Token instances
     let tokenizer = Tokenizer::from_str(&svg);
 
@@ -587,7 +569,7 @@ pub fn parse(svg: &str) -> Vec<Polyline> {
                 } else {
                     None
                 }
-            },
+            }
             _ => None,
         })
         .flat_map(|v| v.into_iter())
@@ -596,35 +578,91 @@ pub fn parse(svg: &str) -> Vec<Polyline> {
     polylines
 }
 
-    // // test only
-    // test_dxf_r12();
-    // test_dxf_r2014();
+pub fn unwrap_drawing(result: DxfResult<Drawing>) -> Drawing {
+    match result {
+        Ok(drawing) => drawing,
+        Err(e) => panic!("unable to load drawing: {:?}: {}", e, e),
+    }
+}
 
-    // let dosimplify = "simplify";
-    // let nosimplify = "no";
+pub fn parse_dxf(s: &str) -> Vec<Polyline> {
+    let mut polylines = Vec::new();
 
-    // let stratege =  "simplify";// "post-simplify", "no"
+    let drawing = unwrap_drawing(Drawing::load(&mut s.as_bytes()));
 
-    // if stratege == dosimplify {
-    //     let simplifyvec = simplify(&polylines);
-    //     write_svg(&simplifyvec, "./tmp.svg");
-    //     write_dxf(&simplifyvec, "./tmp.dxf");
-    //     write_svg(&polylines, "./tmp-no.svg");
-    //     simplifyvec
+    for entity in drawing.entities {
+        match entity.specific {
+            EntityType::Circle(ref circle) => {
+                println!("circle is not supported");
+            }
+            EntityType::Line(ref line) => {
+                println!("Line is found");
+                let mut poly = Polyline::new();
 
-    // } else {
-    //     write_svg(&polylines, "./tmp-no.svg");
-    //     write_dxf(&polylines, "./tmp-no.dxf");
+                poly.push(CoordinatePair::new(line.p1.x, line.p1.y));
+                poly.push(CoordinatePair::new(line.p2.x, line.p2.y));
 
-    //     polylines
-    // }
+                println!("{:?}", poly);
 
+                polylines.push(poly);
+            }
+            EntityType::LwPolyline(ref polyline) => {
+                println!("LwPolyline is found");
+                let mut poly = Polyline::new();
+
+                for vert in &polyline.vertices {
+                    poly.push(CoordinatePair::new(vert.x, vert.y));
+                }
+
+                polylines.push(poly);
+            }
+            EntityType::Polyline(ref polyline) => {
+                println!("Polyline is found");
+
+                let mut poly = Polyline::new();
+
+                for vert in &polyline.vertices {
+                    let location = &vert.location;
+                    poly.push(CoordinatePair::new(location.x, location.y));
+                }
+
+                polylines.push(poly);
+            }
+            _ => {}
+        }
+    }
+
+    polylines
+}
+
+// // test only
+// test_dxf_r12();
+// test_dxf_r2014();
+
+// let dosimplify = "simplify";
+// let nosimplify = "no";
+
+// let stratege =  "simplify";// "post-simplify", "no"
+
+// if stratege == dosimplify {
+//     let simplifyvec = simplify(&polylines);
+//     write_svg(&simplifyvec, "./tmp.svg");
+//     write_dxf(&simplifyvec, "./tmp.dxf");
+//     write_svg(&polylines, "./tmp-no.svg");
+//     simplifyvec
+
+// } else {
+//     write_svg(&polylines, "./tmp-no.svg");
+//     write_dxf(&polylines, "./tmp-no.dxf");
+
+//     polylines
+// }
 
 #[cfg(test)]
 mod tests {
-    extern crate svgparser;
-    #[cfg(feature="use_serde")]
+    #[cfg(feature = "use_serde")]
     extern crate serde_json;
+    extern crate svgparser;
 
     use svgparser::path::Token;
 
@@ -654,9 +692,15 @@ mod tests {
     #[test]
     fn test_current_line_close() {
         let mut line = CurrentLine::new();
-        assert_eq!(line.close(), Err("Lines with less than 2 coordinate pairs cannot be closed.".into()));
+        assert_eq!(
+            line.close(),
+            Err("Lines with less than 2 coordinate pairs cannot be closed.".into())
+        );
         line.add_absolute((1.0, 2.0).into());
-        assert_eq!(line.close(), Err("Lines with less than 2 coordinate pairs cannot be closed.".into()));
+        assert_eq!(
+            line.close(),
+            Err("Lines with less than 2 coordinate pairs cannot be closed.".into())
+        );
         line.add_absolute((2.0, 3.0).into());
         assert_eq!(line.close(), Ok(()));
         let finished = line.finish();
@@ -670,21 +714,33 @@ mod tests {
     fn test_parse_segment_data() {
         let mut current_line = CurrentLine::new();
         let mut lines = Vec::new();
-        parse_path_token(&Token::MoveTo {
-            abs: true,
-            x: 1.0,
-            y: 2.0,
-        }, &mut current_line, &mut lines).unwrap();
-        parse_path_token(&Token::LineTo {
-            abs: true,
-            x: 2.0,
-            y: 3.0,
-        }, &mut current_line, &mut lines).unwrap();
-        parse_path_token(&Token::LineTo {
-            abs: true,
-            x: 3.0,
-            y: 2.0,
-        }, &mut current_line, &mut lines).unwrap();
+        parse_path_token(
+            &Token::MoveTo {
+                abs: true,
+                x: 1.0,
+                y: 2.0,
+            },
+            &mut current_line,
+            &mut lines,
+        ).unwrap();
+        parse_path_token(
+            &Token::LineTo {
+                abs: true,
+                x: 2.0,
+                y: 3.0,
+            },
+            &mut current_line,
+            &mut lines,
+        ).unwrap();
+        parse_path_token(
+            &Token::LineTo {
+                abs: true,
+                x: 3.0,
+                y: 2.0,
+            },
+            &mut current_line,
+            &mut lines,
+        ).unwrap();
         assert_eq!(lines.len(), 0);
         let finished = current_line.finish();
         assert_eq!(lines.len(), 0);
@@ -699,19 +755,25 @@ mod tests {
     fn test_parse_segment_data_horizontal_vertical() {
         let mut current_line = CurrentLine::new();
         let mut lines = Vec::new();
-        parse_path_token(&Token::MoveTo {
-            abs: true,
-            x: 1.0,
-            y: 2.0,
-        }, &mut current_line, &mut lines).unwrap();
-        parse_path_token(&Token::HorizontalLineTo {
-            abs: true,
-            x: 3.0,
-        }, &mut current_line, &mut lines).unwrap();
-        parse_path_token(&Token::VerticalLineTo {
-            abs: true,
-            y: -1.0,
-        }, &mut current_line, &mut lines).unwrap();
+        parse_path_token(
+            &Token::MoveTo {
+                abs: true,
+                x: 1.0,
+                y: 2.0,
+            },
+            &mut current_line,
+            &mut lines,
+        ).unwrap();
+        parse_path_token(
+            &Token::HorizontalLineTo { abs: true, x: 3.0 },
+            &mut current_line,
+            &mut lines,
+        ).unwrap();
+        parse_path_token(
+            &Token::VerticalLineTo { abs: true, y: -1.0 },
+            &mut current_line,
+            &mut lines,
+        ).unwrap();
         assert_eq!(lines.len(), 0);
         let finished = current_line.finish();
         assert_eq!(lines.len(), 0);
@@ -726,16 +788,24 @@ mod tests {
     fn test_parse_segment_data_unsupported() {
         let mut current_line = CurrentLine::new();
         let mut lines = Vec::new();
-        parse_path_token(&Token::MoveTo {
-            abs: true,
-            x: 1.0,
-            y: 2.0,
-        }, &mut current_line, &mut lines).unwrap();
-        let result = parse_path_token(&Token::SmoothQuadratic {
-            abs: true,
-            x: 3.0,
-            y: 4.0,
-        }, &mut current_line, &mut lines);
+        parse_path_token(
+            &Token::MoveTo {
+                abs: true,
+                x: 1.0,
+                y: 2.0,
+            },
+            &mut current_line,
+            &mut lines,
+        ).unwrap();
+        let result = parse_path_token(
+            &Token::SmoothQuadratic {
+                abs: true,
+                x: 3.0,
+                y: 4.0,
+            },
+            &mut current_line,
+            &mut lines,
+        );
         assert!(result.is_err());
         assert_eq!(lines.len(), 0);
         let finished = current_line.finish();
@@ -748,13 +818,69 @@ mod tests {
     fn test_parse_segment_data_multiple() {
         let mut current_line = CurrentLine::new();
         let mut lines = Vec::new();
-        parse_path_token(&Token::MoveTo { abs: true, x: 1.0, y: 2.0, }, &mut current_line, &mut lines).unwrap();
-        parse_path_token(&Token::LineTo { abs: true, x: 2.0, y: 3.0, }, &mut current_line, &mut lines).unwrap();
-        parse_path_token(&Token::MoveTo { abs: true, x: 1.0, y: 3.0, }, &mut current_line, &mut lines).unwrap();
-        parse_path_token(&Token::LineTo { abs: true, x: 2.0, y: 4.0, }, &mut current_line, &mut lines).unwrap();
-        parse_path_token(&Token::MoveTo { abs: true, x: 1.0, y: 4.0, }, &mut current_line, &mut lines).unwrap();
-        parse_path_token(&Token::LineTo { abs: true, x: 2.0, y: 5.0, }, &mut current_line, &mut lines).unwrap();
-        parse_path_token(&Token::MoveTo { abs: true, x: 1.0, y: 5.0, }, &mut current_line, &mut lines).unwrap();
+        parse_path_token(
+            &Token::MoveTo {
+                abs: true,
+                x: 1.0,
+                y: 2.0,
+            },
+            &mut current_line,
+            &mut lines,
+        ).unwrap();
+        parse_path_token(
+            &Token::LineTo {
+                abs: true,
+                x: 2.0,
+                y: 3.0,
+            },
+            &mut current_line,
+            &mut lines,
+        ).unwrap();
+        parse_path_token(
+            &Token::MoveTo {
+                abs: true,
+                x: 1.0,
+                y: 3.0,
+            },
+            &mut current_line,
+            &mut lines,
+        ).unwrap();
+        parse_path_token(
+            &Token::LineTo {
+                abs: true,
+                x: 2.0,
+                y: 4.0,
+            },
+            &mut current_line,
+            &mut lines,
+        ).unwrap();
+        parse_path_token(
+            &Token::MoveTo {
+                abs: true,
+                x: 1.0,
+                y: 4.0,
+            },
+            &mut current_line,
+            &mut lines,
+        ).unwrap();
+        parse_path_token(
+            &Token::LineTo {
+                abs: true,
+                x: 2.0,
+                y: 5.0,
+            },
+            &mut current_line,
+            &mut lines,
+        ).unwrap();
+        parse_path_token(
+            &Token::MoveTo {
+                abs: true,
+                x: 1.0,
+                y: 5.0,
+            },
+            &mut current_line,
+            &mut lines,
+        ).unwrap();
         assert_eq!(lines.len(), 3);
         assert_eq!(current_line.is_valid(), false);
         let finished = current_line.finish();
@@ -795,7 +921,7 @@ mod tests {
         assert_eq!(result[0][3], (10., 10.).into());
     }
 
-    #[cfg(feature="use_serde")]
+    #[cfg(feature = "use_serde")]
     #[test]
     fn test_serde() {
         let cp = CoordinatePair::new(10.0, 20.0);
@@ -827,4 +953,3 @@ mod tests {
     }
 
 }
-
