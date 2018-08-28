@@ -518,9 +518,9 @@ pub fn simplify(polylines: &Vec<Polyline>) -> Vec<Polyline> {
                 poly.push(CoordinatePair::new(cp[1].x, cp[1].y));
 
                 simplifyvec.push(poly);
-                println!("add {:?}-{:?}", cp[0], cp[1]);
+                //println!("add {:?}-{:?}", cp[0], cp[1]);
             } else {
-                println!("skip {:?}-{:?}", cp[0], cp[1]);
+                //println!("skip {:?}-{:?}", cp[0], cp[1]);
             }
         } else {
             let mut vec = Vec::new();
@@ -596,18 +596,15 @@ pub fn parse_dxf(s: &str) -> Vec<Polyline> {
                 println!("circle is not supported");
             }
             EntityType::Line(ref line) => {
-                println!("Line is found");
+                //println!("Line is found");
                 let mut poly = Polyline::new();
 
                 poly.push(CoordinatePair::new(line.p1.x, line.p1.y));
                 poly.push(CoordinatePair::new(line.p2.x, line.p2.y));
 
-                println!("{:?}", poly);
-
                 polylines.push(poly);
             }
             EntityType::LwPolyline(ref polyline) => {
-                println!("LwPolyline is found");
                 let mut poly = Polyline::new();
 
                 for vert in &polyline.vertices {
@@ -617,7 +614,6 @@ pub fn parse_dxf(s: &str) -> Vec<Polyline> {
                 polylines.push(poly);
             }
             EntityType::Polyline(ref polyline) => {
-                println!("Polyline is found");
 
                 let mut poly = Polyline::new();
 
